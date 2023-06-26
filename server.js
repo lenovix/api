@@ -129,3 +129,20 @@ app.post("/loginEU", (req, res) => {
     return res.status(200).json({ message: "Login successful", user });
   });
 });
+
+// Ambulance
+app.get("/panggilan-ambulan", (req, res) => {
+  // const query = 'SELECT * FROM request_unit WHERE unit = "Ambulance" AND status = "Pending"';
+  // const query = 'SELECT request_unit.*, users.user_id FROM request_unit JOIN users ON request_unit.user_id = users.user_id WHERE request_unit.unit = "Ambulance"';
+  const query =
+    "SELECT request_unit.*, users.name AS nama_pengguna FROM request_unit INNER JOIN users ON request_unit.user_id = users.user_id WHERE request_unit.unit = 'Ambulance' AND status = 'Pending'";
+
+  connection.query(query, (error, results, fields) => {
+    if (error) {
+      console.error("Error retrieving data: ", error);
+      res.status(500).json({ message: "Error retrieving data" });
+    } else {
+      res.json(results);
+    }
+  });
+});
