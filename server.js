@@ -5,11 +5,11 @@ const connection = require("./db");
 const app = express();
 const port = 3000;
 
-// app.use(express.json());
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
 app.listen(port, () => {
-  console.log(`Server berjalan di http://localhost:${port}`);
+  console.log(`Server run in http://localhost:${port}`);
 });
 
 app.post("/login", (req, res) => {
@@ -19,7 +19,6 @@ app.post("/login", (req, res) => {
     return res.status(400).json({ error: "Email and password are required" });
   }
 
-  // Query ke database untuk mencocokkan email dan password
   const query = "SELECT * FROM users WHERE email = ? AND password = ?";
   connection.query(query, [email, password], (error, results) => {
     if (error) {
@@ -34,7 +33,6 @@ app.post("/login", (req, res) => {
     }
 
     const user = results[0];
-    // Jika login berhasil, Anda dapat mengirimkan token otentikasi atau respon sukses lainnya
     console.log("berhasil login");
     return res.status(200).json({ message: "Login successful", user });
   });
@@ -43,7 +41,6 @@ app.post("/login", (req, res) => {
 app.post("/register", (req, res) => {
   const { name, email, password } = req.body;
 
-  // Memasukkan data pengguna baru ke database
   const query = `INSERT INTO users (name, email, password) VALUES (?, ?, ?)`;
   connection.query(query, [name, email, password], (err, result) => {
     if (err) {
@@ -56,18 +53,12 @@ app.post("/register", (req, res) => {
 });
 
 app.post("/request_unit", (req, res) => {
-  const { user_id, address, situation, unit } = req.body;
+  const { user_id, address, latlong, situation, unit } = req.body;
   const status = "Pending";
 
-  // Lakukan validasi data
+  const query = `INSERT INTO request_unit (user_id, address, latlong, situation, unit, status) VALUES (?, ?, ?, ?, ?, ?)`;
+  const values = [user_id, address, latlong, situation, unit, status];
 
-  // Lakukan operasi untuk menyimpan data ke tabel request_unit di database
-
-  // Contoh menggunakan MySQL
-  const query = `INSERT INTO request_unit (user_id, address, situation, unit, status) VALUES (?, ?, ?, ?, ?)`;
-  const values = [user_id, address, situation, unit, status];
-
-  // Lakukan eksekusi query ke database
   connection.query(query, values, (err, result) => {
     if (err) {
       console.error(err);
@@ -103,15 +94,17 @@ app.delete("/users/:id", (req, res) => {
 
 // for Emergency unit
 app.post("/loginEU", (req, res) => {
-  const { email, password } = req.body;
+  const { username, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password are required" });
+  if (!username || !password) {
+    return res
+      .status(400)
+      .json({ error: "username and password are required" });
   }
 
-  // Query ke database untuk mencocokkan email dan password
-  const query = "SELECT * FROM admin WHERE username = ? AND password = ?";
-  connection.query(query, [email, password], (error, results) => {
+  const query =
+    "SELECT * FROM department_users WHERE username = ? AND password = ?";
+  connection.query(query, [username, password], (error, results) => {
     if (error) {
       console.error("Error executing login query:", error);
       return res
@@ -120,29 +113,74 @@ app.post("/loginEU", (req, res) => {
     }
 
     if (results.length === 0) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      return res.status(401).json({ error: "Invalid username or password" });
     }
 
     const user = results[0];
-    // Jika login berhasil, Anda dapat mengirimkan token otentikasi atau respon sukses lainnya
     console.log("berhasil login");
     return res.status(200).json({ message: "Login successful", user });
   });
 });
 
-// Ambulance
-app.get("/panggilan-ambulan", (req, res) => {
-  // const query = 'SELECT * FROM request_unit WHERE unit = "Ambulance" AND status = "Pending"';
-  // const query = 'SELECT request_unit.*, users.user_id FROM request_unit JOIN users ON request_unit.user_id = users.user_id WHERE request_unit.unit = "Ambulance"';
-  const query =
-    "SELECT request_unit.*, users.name AS nama_pengguna FROM request_unit INNER JOIN users ON request_unit.user_id = users.user_id WHERE request_unit.unit = 'Ambulance' AND status = 'Pending'";
+app.post("/register_department", (req, res) => {
+  const { full_name, username, password, department_name } = req.body;
 
-  connection.query(query, (error, results, fields) => {
+  const checkUserQuery = `SELECT * FROM department_users WHERE username = ?`;
+  connection.query(checkUserQuery, [username], (error, results) => {
+    if (error) {
+      console.error("Error checking user:", error);
+      res.status(500).json({ error: "Internal server error" });
+    } else if (results.length > 0) {
+      res.status(400).json({ error: "Username already exists" });
+    } else {
+      const registerUserQuery = `INSERT INTO department_users (full_name, username, password, department_name) VALUES (?, ?, ?, ?)`;
+      connection.query(
+        registerUserQuery,
+        [full_name, username, password, department_name],
+        (error, results) => {
+          if (error) {
+            console.error("Error registering user:", error);
+            res.status(500).json({ error: "Internal server error" });
+          } else {
+            res.status(200).json({ message: "User registered successfully" });
+          }
+        }
+      );
+    }
+  });
+});
+
+app.get("/panggilan/:department", (req, res) => {
+  const department = req.params.department;
+
+  const query =
+    "SELECT request_unit.*, users.name AS nama_pengguna FROM request_unit INNER JOIN users ON request_unit.user_id = users.user_id WHERE request_unit.unit = ? AND status IN ('Pending', 'Handled')";
+
+  connection.query(query, [department], (error, results, fields) => {
     if (error) {
       console.error("Error retrieving data: ", error);
       res.status(500).json({ message: "Error retrieving data" });
     } else {
       res.json(results);
+    }
+  });
+});
+
+// Route to change call status
+app.put("/calls/:report_id", (req, res) => {
+  const reportId = req.params.report_id;
+  const newStatus = req.body.status;
+
+  const query = `UPDATE request_unit SET status = ? WHERE report_id = ?`;
+  connection.query(query, [newStatus, reportId], (error, results) => {
+    if (error) {
+      res.status(500).json({ error: "Gagal memperbarui status panggilan" });
+    } else {
+      res.status(200).json({
+        message: "Status panggilan berhasil diperbarui ",
+        reportId,
+        newStatus,
+      });
     }
   });
 });
